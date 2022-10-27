@@ -1,45 +1,46 @@
 #!/usr/bin/python3
+""" a Fabric script (based on the file 1-pack_web_static.py) that distributes..
+    ..an archive to your web servers, using the function do_deploy: """
+
+
 from fabric.api import *
 from datetime import datetime
-import os.path
-import re
-import os
-env.hosts = ['34.74.176.42', '34.75.43.152']
+from os.path import exists
 
 
-def do_pack():
-        """ Generate a tar archives """
-        date_recent = datetime.now().strftime("%Y%m%d%H%M%S")
-        path_ruth = "versions/web_static_{}.tgz".format(date_recent)
-        try:
-                local("mkdir -p versions")
-                local("tar -czvf {} web_static".format(path_ruth))
-                return path_ruth
-        except:
-                return None
+env.hosts = ['35.237.166.125', '54.167.61.201']  # <IP web-01>, <IP web-02>
+# ^ All remote commands must be executed on your both web servers
+# (using env.hosts = ['<IP web-01>', 'IP web-02'] variable in your script)
 
 
 def do_deploy(archive_path):
-        try:
-                if not os.path.exists(archive_path):
-                        return False
-                put(archive_path, "/tmp/")
-                fileComp = archive_path.split("/")[1].split(".")[0]
-                path = "/data/web_static/releases/{}".format(fileComp)
-                tgzFile = fileComp + '.tgz'
-                print(fileComp)
-                print(path)
-                print(tgzFile)
-                
-                run("mkdir -p {}".format(path))
-                run("tar -xvzf /tmp/{}.tgz -C {}".format(fileComp, path))
-                run("sudo rm /tmp/{}.tgz".format(fileComp))
-                run("sudo rm /data/web_static/current")
-                run("sudo ln -sf /data/web_static/releases/{}\
-                /data/web_static/current".format(fileComp))
-                run("sudo mv /data/web_static/releases/{}/web_static/* \
-                /data/web_static/releases/{}/".format(fileComp, fileComp))
-                run("rm -rf /data/web_static/releases/{}/web_static".format(fileComp))
-                return True
-        except:
-                return False
+    """ distributes an archive to my web servers
+    """
+    if exists(archive_path) is False:
+        return False  # Returns False if the file at archive_path doesnt exist
+    filename = archive_path.split('/')[-1]
+    # so now filename is <web_static_2021041409349.tgz>
+    no_tgz = '/data/web_static/releases/' + "{}".format(filename.split('.')[0])
+    # curr = '/data/web_static/current'
+    tmp = "/tmp/" + filename
+
+    try:
+        put(archive_path, "/tmp/")
+        # ^ Upload the archive to the /tmp/ directory of the web server
+        run("mkdir -p {}/".format(no_tgz))
+        # Uncompress the archive to the folder /data/web_static/releases/
+        # <archive filename without extension> on the web server
+        run("tar -xzf {} -C {}/".format(tmp, no_tgz))
+        run("rm {}".format(tmp))
+        run("mv {}/web_static/* {}/".format(no_tgz, no_tgz))
+        run("rm -rf {}/web_static".format(no_tgz))
+        # ^ Delete the archive from the web server
+        run("rm -rf /data/web_static/current")
+        # Delete the symbolic link /data/web_static/current from the web server
+        run("ln -s {}/ /data/web_static/current".format(no_tgz))
+        # Create a new the symbolic link /data/web_static/current on the
+        # web server, linked to the new version of your code
+        # (/data/web_static/releases/<archive filename without extension>)
+        return True
+    except:
+        return False
